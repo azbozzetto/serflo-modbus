@@ -1,0 +1,51 @@
+# Configuración HP550 Hydramotion Modbus Reader
+
+serial:
+  port: "COM9"              # Puerto serial (COM1-COM9 en Windows, /dev/ttyUSB0 en Linux)
+  baudrate: 9600            # 1200, 2400, 4800, 9600 (HP550 configurado en 9600)
+  parity: "E"               # N (None), E (Even), O (Odd) - HP550 default: E (PAR)
+  stopbits: 1               # Bits de parada
+  bytesize: 7               # 7 bits de datos (con paridad)
+  timeout: 5.0              # Timeout en segundos (más largo para 1200 baud)
+
+modbus:
+  slave_address: 1          # Dirección del esclavo HP550 (1-247, default: 1)
+  polling_interval: 1.0     # Intervalo de polling en segundos (mínimo 1.0 según manual)
+  max_retries: 3            # Número máximo de reintentos en caso de error
+
+instrument:
+  viscosity_range: 10000    # Rango de viscosidad en cP (ajustar según modelo)
+  temperature_range: 500    # Rango de temperatura en °C (0-500)
+
+logging:
+  level: "INFO"             # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  file: "logs/hp550.log"    # Archivo de log
+  max_bytes: 10485760       # 10 MB - tamaño máximo del archivo de log
+  backup_count: 5           # Número de archivos de backup
+
+# Configuración para captura continua 24/7
+data_capture:
+  enabled: true             # Habilitar captura continua
+  interval: 10              # Intervalo de captura en segundos (mínimo 2)
+  storage_type: "sqlite"    # Tipo de almacenamiento: "sqlite", "csv", "both"
+
+  # Configuración SQLite
+  sqlite:
+    database: "data/hp550_data.db"
+    table_name: "readings"
+
+  # Configuración CSV
+  csv:
+    directory: "data/csv"
+    filename_pattern: "hp550_%Y%m%d.csv"  # Rotación diaria automática
+
+  # Mantenimiento de datos
+  maintenance:
+    auto_cleanup: false     # Limpiar datos antiguos automáticamente
+    keep_days: 90           # Días de datos a mantener (si auto_cleanup = true)
+
+  # Reconexión automática
+  reconnection:
+    enabled: true           # Intentar reconectar automáticamente
+    max_attempts: 5         # Intentos antes de rendirse (-1 = infinito)
+    retry_delay: 30         # Segundos entre intentos

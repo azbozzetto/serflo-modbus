@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HP550 Hydramotion - Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+</head>
+<body>
+    <div class="page">
+        <header>
+            <h1><span>HP550</span> Hydramotion Dashboard</h1>
+            <div class="header-right">
+                <div id="refresh-info" class="refresh-info"></div>
+                <div id="status" class="status">Conectando...</div>
+            </div>
+        </header>
+
+        <div class="cards">
+            <div class="card vl">
+                <div class="label">Viscosidad</div>
+                <div class="value" id="val-vl">--</div>
+                <div class="unit">cP</div>
+            </div>
+            <div class="card temp">
+                <div class="label">Temperatura</div>
+                <div class="value" id="val-temp">--</div>
+                <div class="unit">&deg;C</div>
+            </div>
+            <div class="card timestamp">
+                <div class="label">Ultima captura</div>
+                <div class="value" id="val-ts">--</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button data-hours="0.5">30 min</button>
+            <button data-hours="1" class="active">1 hora</button>
+            <button data-hours="6">6 horas</button>
+            <button data-hours="24">24 horas</button>
+            <button data-hours="168">7 dias</button>
+            <div class="spacer"></div>
+            <div class="info" id="info-count"></div>
+            <button class="btn-download" id="btn-download" title="Descargar CSV">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                CSV
+            </button>
+        </div>
+
+        <div class="stats-bar" id="stats-bar"></div>
+
+        <div class="chart-container">
+            <canvas id="chart"></canvas>
+        </div>
+
+        <footer>Created by <strong>azbozzetto</strong></footer>
+    </div>
+
+    <script>
+        let chart = null;
+        let currentHours = 1;
+        let lastData = null;
+        let refreshTimer = null;
+        const REFRESH_INTERVAL = 10000;
+
+        function initChart() {
+            const ctx = document.getElementById('chart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Viscosidad VL (cP)',
+                            data: [],
+                            borderColor: '#4fc3f7',
+                            backgroundColor: 'rgba(79,195,247,0.08)',
+                            fill: true,
+                            yAxisID: 'y-vl',
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Temperatura (\u00b0C)',
+                            data: [],
+                            borderColor: '#ff8a65',
+                            backgroundColor: 'rgba(255,138,101,0.08)',
+                            fill: true,
+                            yAxisID: 'y-temp',
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: '#aaa', font: { size: 12 } }
+                        },
+                        tooltip: {
+                            backgroundColor: '#1a2733',
+                            borderColor: '#2a3a4a',
+                            borderWidth: 1,
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            callbacks: {
+                                title: function(items) { return items[0].label; }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: '#666', maxTicksLimit: 12, maxRotation: 0 },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        'y-vl': {
+                            type: 'linear',
+                            position: 'left',
+                            title: { display: true, text: 'Viscosidad (cP)', color: '#4fc3f7' },
+                            ticks: { color: '#4fc3f7' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        'y-temp': {
+                            type: 'linear',
+                            position: 'right',
+                            title: { display: true, text: 'Temperatura (\u00b0C)', color: '#ff8a65' },
+                            ticks: { color: '#ff8a65' },
+                            grid: { drawOnChartArea: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch(`/api/readings?hours=${currentHours}`);
+                const data = await res.json();
+                lastData = data;
+
+                const labels = data.timestamps.map(ts => {
+                    if (currentHours <= 1) return ts.substring(11, 19);
+                    if (currentHours <= 24) return ts.substring(11, 16);
+                    return ts.substring(5, 16);
+                });
+
+                chart.data.labels = labels;
+                chart.data.datasets[0].data = data.vl;
+                chart.data.datasets[1].data = data.temperature;
+                chart.update('none');
+
+                document.getElementById('info-count').textContent = `${data.count} lecturas`;
+
+                const latestRes = await fetch('/api/latest');
+                if (latestRes.ok) {
+                    const latest = await latestRes.json();
+                    document.getElementById('val-vl').textContent =
+                        latest.vl != null ? latest.vl.toFixed(1) : '--';
+                    document.getElementById('val-temp').textContent =
+                        latest.temperature != null ? latest.temperature.toFixed(1) : '--';
+                    document.getElementById('val-ts').textContent =
+                        latest.timestamp || '--';
+                    document.getElementById('status').textContent = 'En linea';
+                    document.getElementById('status').className = 'status online';
+                }
+
+                const statsRes = await fetch(`/api/stats?hours=${currentHours}`);
+                const stats = await statsRes.json();
+                const sb = document.getElementById('stats-bar');
+                if (stats.vl.avg != null) {
+                    sb.innerHTML = `
+                        <span>VL: <strong>avg ${stats.vl.avg}</strong> | min ${stats.vl.min} | max ${stats.vl.max} cP</span>
+                        <span>Temp: <strong>avg ${stats.temperature.avg}</strong> | min ${stats.temperature.min} | max ${stats.temperature.max} \u00b0C</span>
+                        <span>Total: <strong>${stats.total}</strong> lecturas</span>
+                    `;
+                }
+            } catch (err) {
+                document.getElementById('status').textContent = 'Sin conexion';
+                document.getElementById('status').className = 'status offline';
+            }
+        }
+
+        // Descarga CSV del rango visible
+        function downloadCSV() {
+            if (!lastData || lastData.count === 0) return;
+
+            let csv = 'Timestamp,VL_cP,Temperature_C\n';
+            for (let i = 0; i < lastData.timestamps.length; i++) {
+                const ts = lastData.timestamps[i] || '';
+                const vl = lastData.vl[i] != null ? lastData.vl[i] : '';
+                const temp = lastData.temperature[i] != null ? lastData.temperature[i] : '';
+                csv += `${ts},${vl},${temp}\n`;
+            }
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hp550_${currentHours}h_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Eventos
+        document.querySelectorAll('.controls button[data-hours]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelector('.controls button.active').classList.remove('active');
+                btn.classList.add('active');
+                currentHours = parseFloat(btn.dataset.hours);
+                loadData();
+            });
+        });
+
+        document.getElementById('btn-download').addEventListener('click', downloadCSV);
+
+        document.getElementById('refresh-info').textContent =
+            `Actualiza cada ${REFRESH_INTERVAL / 1000}s`;
+
+        initChart();
+        loadData();
+        refreshTimer = setInterval(loadData, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>

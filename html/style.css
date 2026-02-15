@@ -1,0 +1,199 @@
+/* ─── HP550 Hydramotion Dashboard ─────────────────────────────────────────── */
+/* Editar este archivo para personalizar branding y colores                    */
+
+/* ─── Variables de branding ───────────────────────────────────────────────── */
+:root {
+    --bg-primary: #1f1f1f;
+    --bg-panel: #1a2733;
+    --border: #2a3a4a;
+    --text: #e0e0e0;
+    --text-muted: #888;
+    --text-dim: #666;
+    --text-subtle: #556;
+    --accent: #4fc3f7;
+    --color-vl: #4fc3f7;
+    --color-temp: #ff8a65;
+    --color-online: #66bb6a;
+    --color-offline: #ef5350;
+}
+
+/* ─── Reset & base ────────────────────────────────────────────────────────── */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+    height: 100%;
+    overflow: hidden;
+}
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+}
+
+/* ─── Layout one-page ─────────────────────────────────────────────────────── */
+.page {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ─── Header ──────────────────────────────────────────────────────────────── */
+header {
+    background: var(--bg-panel);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+}
+header h1 span { color: var(--accent); }
+
+.header-right { text-align: right; }
+.refresh-info {
+    font-size: 11px;
+    color: var(--text-subtle);
+    margin-bottom: 2px;
+}
+.status {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+.status.online { color: var(--color-online); }
+.status.offline { color: var(--color-offline); }
+
+/* ─── Cards ───────────────────────────────────────────────────────────────── */
+.cards {
+    display: flex;
+    gap: 12px;
+    padding: 12px 24px;
+    flex-shrink: 0;
+}
+.card {
+    background: var(--bg-panel);
+    border-radius: 8px;
+    padding: 12px 20px;
+    flex: 1;
+    min-width: 160px;
+    border: 1px solid var(--border);
+}
+.card .label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.card .value {
+    font-size: 28px;
+    font-weight: 700;
+    margin-top: 2px;
+    line-height: 1.2;
+}
+.card .unit {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted);
+}
+.card.vl .value { color: var(--color-vl); }
+.card.temp .value { color: var(--color-temp); }
+.card.timestamp .value {
+    color: var(--text-muted);
+    font-size: 18px;
+    margin-top: 6px;
+}
+
+/* ─── Controls ────────────────────────────────────────────────────────────── */
+.controls {
+    padding: 6px 24px;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-shrink: 0;
+}
+.controls button {
+    background: var(--bg-panel);
+    color: #ccc;
+    border: 1px solid var(--border);
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+}
+.controls button:hover { background: #243442; }
+.controls button.active {
+    background: var(--accent);
+    color: var(--bg-primary);
+    border-color: var(--accent);
+    font-weight: 600;
+}
+.controls .spacer { flex: 1; }
+.controls .info {
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+/* ─── Download button ─────────────────────────────────────────────────────── */
+.btn-download {
+    background: none;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 5px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.btn-download:hover {
+    background: var(--bg-panel);
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+.btn-download svg {
+    width: 14px;
+    height: 14px;
+}
+
+/* ─── Stats bar ───────────────────────────────────────────────────────────── */
+.stats-bar {
+    padding: 2px 24px 6px;
+    display: flex;
+    gap: 24px;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+.stats-bar span strong { color: #aaa; }
+
+/* ─── Chart ───────────────────────────────────────────────────────────────── */
+.chart-container {
+    padding: 4px 24px 6px;
+    flex: 1;
+    min-height: 0;
+    position: relative;
+}
+.chart-container canvas {
+    background: var(--bg-panel);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+/* ─── Footer ──────────────────────────────────────────────────────────────── */
+footer {
+    flex-shrink: 0;
+    text-align: right;
+    padding: 0px 24px 12px 0px;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+footer strong {
+    color: var(--text-muted);
+    font-weight: 600;
+}
