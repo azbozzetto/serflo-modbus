@@ -1,0 +1,26 @@
+[Unit]
+Description=HP550 Hydramotion Data Capture
+After=dev-ttyUSB0.device
+BindsTo=dev-ttyUSB0.device
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/serflow-modbus
+ExecStart=/serflow-modbus/venv/bin/python hp550_capture.py --config config/config.yaml
+Restart=on-failure
+RestartSec=15
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+Environment=PYTHONUNBUFFERED=1
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hp550-capture
+
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

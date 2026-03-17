@@ -1,6 +1,6 @@
 # HP550 Hydramotion - Sistema de Captura
 
-Aplicación Python para captura continua de datos del viscosímetro y temperatura - HP550 Hydramotion vía broadcasting mode sobre RS-232, con dashboard web integrado para visualización en tiempo real.
+Aplicación Python para captura continua de datos del viscosímetro y temperatura - HP550 Hydramotion vía broadcasting mode sobre RS-232, con dashboard web integrado para visualización en tiempo real y persistencia de datos.
 
 ## Características
 
@@ -10,13 +10,14 @@ Aplicación Python para captura continua de datos del viscosímetro y temperatur
 - Reconexión automática si se pierde la conexión
 - Rotación automática de archivos CSV por día
 - Logging completo de operaciones y errores
+- Servicio systemd para ejecución continua en Linux
 
 ## Requisitos
 
 ### Hardware
 - HP550 Hydramotion Viscometer
 - Puerto serial RS-232 o adaptador USB-Serial (FTDI compatible)
-- PC (Windows) o Raspberry Pi (Linux)
+- PC (Windows) o Raspberry Pi con Linux
 
 ### Software
 - Python 3.7 o superior
@@ -52,7 +53,7 @@ Aplicación Python para captura continua de datos del viscosímetro y temperatur
    Editar `config/config.yaml` y ajustar:
    ```yaml
    serial:
-     port: "COM9"              # Tu puerto serial (Linux: /dev/ttyUSB0)
+     port: "COM9"              # Puerto serial (Linux: /dev/ttyUSB0)
 
    data_capture:
      enabled: true
@@ -146,6 +147,7 @@ modbus/
 ├── html/
 │   └── dashboard.html              # Dashboard web (Chart.js)
 ├── hp550_capture.py                # Script principal: captura + dashboard
+├── hp550-capture.service           # Unidad systemd para Raspberry Pi
 ├── export_data.py                  # Herramienta de exportacion
 ├── requirements.txt                # Dependencias Python
 ├── logs/
@@ -166,9 +168,37 @@ modbus/
 | vc_cp | REAL | Viscosidad corregida (cP) |
 | is_valid | INTEGER | Flag de validez (1=valido) |
 
+## Servicio systemd (Raspberry Pi / Ubuntu)
+
+Para ejecutar como servicio 24/7 con inicio automático en boot:
+
+```bash
+# 1. Copiar el archivo de servicio
+sudo cp /serflow-modbus/hp550-capture.service /etc/systemd/system/
+
+# 2. Agregar usuario al grupo serial
+sudo usermod -a -G dialout pi
+
+# 3. Activar e iniciar
+sudo systemctl daemon-reload
+sudo systemctl enable hp550-capture.service
+sudo systemctl start hp550-capture.service
+```
+
+El servicio está vinculado a `/dev/ttyUSB0`: se detiene automáticamente si se desconecta el adaptador USB-serial y se reinicia al reconectarlo.
+
+### Gestión del servicio
+
+```bash
+sudo systemctl status hp550-capture    # estado actual
+sudo systemctl stop hp550-capture      # detener
+sudo systemctl restart hp550-capture   # reiniciar
+journalctl -u hp550-capture -f         # logs en tiempo real
+```
+
 ## Documentacion Completa
 
-Para informacion detallada sobre configuracion avanzada, ejecucion como servicio, troubleshooting y mantenimiento:
+Para informacion detallada sobre configuracion avanzada, troubleshooting y mantenimiento:
 
 **[README_CAPTURE_24X7.md](README_CAPTURE_24X7.md)**
 
