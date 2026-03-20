@@ -7,68 +7,395 @@
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
 </head>
 <body>
     <div class="page">
         <header>
-            <h1><span>HP550</span> Hydramotion Dashboard</h1>
+            <div class="header-left">
+                <button class="btn-menu" id="btn-menu" title="Registro de producción">&#9776;</button>
+                <h1><span>HP550</span> Hydramotion Dashboard</h1>
+            </div>
             <div class="header-right">
-                <div id="refresh-info" class="refresh-info"></div>
-                <div id="status" class="status">Conectando...</div>
+                <div id="status" class="status">● Conectando...</div>
             </div>
         </header>
 
+        <!-- Cards: Partida primero, luego VL y Temp -->
         <div class="cards">
-            <div class="card vl">
-                <div class="label">Viscosidad</div>
-                <div class="value" id="val-vl">--</div>
-                <div class="unit">cP</div>
+            <div class="card partida-info" id="card-partida" title="Clic para cambiar partida">
+                <div class="card-partida-top">
+                    <div class="label">Partida</div>
+                    <span class="partida-mode-pill live" id="partida-mode-pill">● En Vivo</span>
+                </div>
+                <div class="partida-main">
+                    <div class="partida-top-row">
+                        <span class="partida-num" id="card-partida-num">--</span>
+                        <span class="partida-fecha" id="card-partida-fecha">--</span>
+                    </div>
+                    <div class="partida-articulo" id="card-partida-articulo"></div>
+                </div>
             </div>
-            <div class="card temp">
-                <div class="label">Temperatura</div>
-                <div class="value" id="val-temp">--</div>
-                <div class="unit">&deg;C</div>
-            </div>
-            <div class="card timestamp">
-                <div class="label">Ultima captura</div>
-                <div class="value" id="val-ts">--</div>
+
+            <div class="card medicion">
+                <div class="label">Mediciones</div>
+                <div class="medicion-table-wrap">
+                    <table class="medicion-log-table">
+                        <thead>
+                            <tr>
+                                <th class="mlth-hora" rowspan="2">Hora</th>
+                                <th colspan="4" class="mlth-group mlth-vl">Viscosidad</th>
+                                <th colspan="4" class="mlth-group mlth-temp">Temperatura</th>
+                            </tr>
+                            <tr>
+                                <th>Real</th><th>Min</th><th>Max</th><th>Avg</th>
+                                <th>Real</th><th>Min</th><th>Max</th><th>Avg</th>
+                            </tr>
+                        </thead>
+                        <tbody id="medicion-log-body">
+                            <!-- filas de lectura: generadas por renderReadingsLog() -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="medicion-total" id="stat-total"></div>
             </div>
         </div>
 
-        <div class="controls">
+        <div class="controls" id="time-controls">
             <button data-hours="0.5">30 min</button>
-            <button data-hours="1" class="active">1 hora</button>
+            <button data-hours="1">1 hora</button>
             <button data-hours="6">6 horas</button>
-            <button data-hours="24">24 horas</button>
-            <button data-hours="168">7 dias</button>
-            <div class="spacer"></div>
-            <div class="info" id="info-count"></div>
-            <button class="btn-download" id="btn-download" title="Descargar CSV">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                    <polyline points="7 10 12 15 17 10"/>
-                    <line x1="12" y1="15" x2="12" y2="3"/>
-                </svg>
-                CSV
-            </button>
-        </div>
+            <button id="btn-day-mode" title="Ver día completo (00:00–23:59)">Partidas</button>
 
-        <div class="stats-bar" id="stats-bar"></div>
+            <div class="ctrl-sep"></div>
+
+            <button id="btn-back" title="Ventana anterior [&#8592;]">&#8592;</button>
+            <button id="btn-auto" class="btn-auto is-live" title="Ir a vista automática (hoy)">Auto</button>
+            <button id="btn-fwd" title="Ventana siguiente [&#8594;]" disabled>&#8594;</button>
+
+            <div class="spacer"></div>
+
+            <button id="btn-reset-zoom" class="btn-icon" title="Restablecer zoom">&#8635; Zoom</button>
+        </div>
 
         <div class="chart-container">
             <canvas id="chart"></canvas>
         </div>
 
+        <div class="scale-controls">
+            <span class="scale-label">VL:</span>
+            <label class="scale-check"><input type="checkbox" id="vl-auto"> Auto</label>
+            <label class="scale-field">Min <input type="number" id="vl-min" class="scale-input"></label>
+            <label class="scale-field">Max <input type="number" id="vl-max" class="scale-input" value="5000"></label>
+
+            <span class="scale-sep">|</span>
+
+            <span class="scale-label">Temp:</span>
+            <label class="scale-check"><input type="checkbox" id="temp-auto" checked> Auto</label>
+            <label class="scale-field">Min <input type="number" id="temp-min" class="scale-input" disabled></label>
+            <label class="scale-field">Max <input type="number" id="temp-max" class="scale-input" disabled></label>
+
+            <span class="scale-sep">|</span>
+
+            <button id="btn-toggle-eventos"  class="btn-toggle active" title="Mostrar/ocultar eventos en el gráfico">Eventos</button>
+            <button id="btn-toggle-muestras" class="btn-toggle active" title="Mostrar/ocultar muestras y lecturas en el gráfico">Muestras &amp; Lecturas</button>
+
+            <div id="refresh-info" class="refresh-info"></div>
+        </div>
+
         <footer>Created by <strong>azbozzetto</strong></footer>
     </div>
 
+    <!-- Popup selector de partida -->
+    <div id="partida-popup-overlay" class="popup-overlay">
+        <div class="popup" id="partida-popup">
+            <div class="popup-header">
+                <span>SELECCIÓN DE PARTIDA</span>
+                <button class="btn-popup-close" id="btn-popup-close">&#10005;</button>
+            </div>
+            <div class="popup-body">
+                <div id="partida-live-section"></div>
+                <table class="partida-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>N° Partida</th>
+                            <th>Artículo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="partida-table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drawer overlay -->
+    <div id="drawer-overlay" class="drawer-overlay"></div>
+
+    <!-- Drawer lateral -->
+    <div id="drawer" class="drawer">
+        <div class="drawer-header">
+            <span>Registro de Producción</span>
+            <button class="btn-drawer-close" id="btn-drawer-close">&#10005;</button>
+        </div>
+        <div class="drawer-body">
+
+            <!-- Sección 1: Partidas -->
+            <details class="drawer-section" open>
+                <summary>Partidas</summary>
+                <form class="drawer-form" id="form-partida">
+                    <div class="form-row">
+                        <label>Fecha</label>
+                        <input type="date" id="f-partida-fecha">
+                    </div>
+                    <div class="form-row">
+                        <label>N° de Partida</label>
+                        <input type="number" id="f-partida-num" min="1" placeholder="Ej: 42">
+                    </div>
+                    <div class="form-row">
+                        <label>Artículo</label>
+                        <input type="text" id="f-partida-articulo" placeholder="Descripción del artículo">
+                    </div>
+                    <div class="form-msg" id="msg-partida"></div>
+                    <button type="submit" class="btn-primary">Crear Partida</button>
+                </form>
+            </details>
+
+            <!-- Sección 2: Eventos -->
+            <details class="drawer-section">
+                <summary>Eventos</summary>
+                <form class="drawer-form" id="form-evento">
+                    <div class="form-row">
+                        <label>Partida</label>
+                        <select id="f-evento-partida"></select>
+                    </div>
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Hora</label>
+                            <input type="time" id="f-evento-hora">
+                        </div>
+                        <div class="form-row">
+                            <label>Temperatura °C</label>
+                            <input type="number" id="f-evento-temp" step="0.1" placeholder="Opcional">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>Evento</label>
+                        <textarea id="f-evento-texto" placeholder="Descripción del evento"></textarea>
+                    </div>
+                    <div class="form-msg" id="msg-evento"></div>
+                    <button type="submit" class="btn-primary">Registrar Evento</button>
+                </form>
+            </details>
+
+            <!-- Sección 3: Muestras & Lecturas -->
+            <details class="drawer-section">
+                <summary>Muestras &amp; Lecturas</summary>
+                <form class="drawer-form" id="form-muestra">
+                    <div class="form-row">
+                        <label>Partida</label>
+                        <select id="f-muestra-partida"></select>
+                    </div>
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Hora</label>
+                            <input type="time" id="f-muestra-hora">
+                        </div>
+                        <div class="form-row">
+                            <label>Tipo</label>
+                            <select id="f-muestra-tipo">
+                                <option value="lectura">Lectura</option>
+                                <option value="laboratorio">Laboratorio</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>Instrumento</label>
+                        <select id="f-muestra-instrumento">
+                            <option value="">— ninguno —</option>
+                            <option value="pipeta">Pipeta</option>
+                            <option value="pico 5">Pico 5</option>
+                            <option value="pico 7">Pico 7</option>
+                        </select>
+                    </div>
+                    <div class="form-row-2">
+                        <div class="form-row">
+                            <label>Viscosidad</label>
+                            <input type="number" id="f-muestra-visc" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-row">
+                            <label>Temperatura °C</label>
+                            <input type="number" id="f-muestra-temp" step="0.1" placeholder="0.0">
+                        </div>
+                    </div>
+                    <div class="form-msg" id="msg-muestra"></div>
+                    <button type="submit" class="btn-primary">Registrar Muestra</button>
+                </form>
+            </details>
+
+        <!-- Versión al pie del drawer-body -->
+        <div class="drawer-version">v1.2.0</div>
+
+        </div><!-- /drawer-body -->
+
+        <!-- CSV download al pie del drawer -->
+        <div class="drawer-footer">
+            <button id="btn-download" class="btn-csv">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Descargar CSV
+            </button>
+        </div>
+    </div>
+
     <script>
+        // ── Estado ──────────────────────────────────────────────────────────
         let chart = null;
         let currentHours = 1;
+        let currentOffset = 0;   // horas hacia atrás desde ahora (modo live)
+        let currentDayMode = false;
+        let currentViewDate = '';        // 'YYYY-MM-DD' activo en modo día
         let lastData = null;
         let refreshTimer = null;
+        let isZoomed = false;
+        let appMode = 'live';            // 'live' | 'partida' (producción)
+        let currentPartidaId = null;
+        let allPartidas = [];
+        let recentReadings = [];         // [{hora, vl, temp, stats}] newest first
+        const MAX_LOG = 3;
         const REFRESH_INTERVAL = 10000;
+        let lastAnnotations = {};        // todas las anotaciones sin filtro
+        let showEventos  = true;
+        let showMuestras = true;
 
+        // ── Helpers ────────────────────────────────────────────────────────
+        function computeRollingStats(data) {
+            // Para cada índice i retorna stats acumuladas desde 0 hasta i (inclusive).
+            // O(n) — un solo pase. stats[i] = {vl:{min,max,avg,sum,count}, temp:{...}}
+            const n    = data.timestamps ? data.timestamps.length : 0;
+            const vls  = data.vl          || [];
+            const tmps = data.temperature || [];
+            let vlMin = Infinity, vlMax = -Infinity, vlSum = 0, vlN = 0;
+            let tMin  = Infinity, tMax  = -Infinity, tSum  = 0, tN  = 0;
+            const out = [];
+            for (let i = 0; i < n; i++) {
+                const v = vls[i], t = tmps[i];
+                if (v != null) { if (v < vlMin) vlMin = v; if (v > vlMax) vlMax = v; vlSum += v; vlN++; }
+                if (t != null) { if (t < tMin)  tMin  = t; if (t > tMax)  tMax  = t; tSum  += t; tN++;  }
+                out.push({
+                    vl:   vlN ? { min: vlMin, max: vlMax, avg: vlSum / vlN, sum: vlSum, count: vlN } : null,
+                    temp: tN  ? { min: tMin,  max: tMax,  avg: tSum  / tN,  sum: tSum,  count: tN  } : null
+                });
+            }
+            return out;
+        }
+
+        function extendStats(prev, vl, temp) {
+            // Extiende un objeto de stats acumuladas con un nuevo valor.
+            const ext = (s, v) => {
+                if (v == null) return s;
+                if (!s) return { min: v, max: v, avg: v, sum: v, count: 1 };
+                const count = s.count + 1, sum = s.sum + v;
+                return { min: Math.min(s.min, v), max: Math.max(s.max, v), avg: sum / count, sum, count };
+            };
+            return {
+                vl:   ext(prev ? prev.vl   : null, vl),
+                temp: ext(prev ? prev.temp : null, temp)
+            };
+        }
+
+        function fmtNum(v, decimals = 1) {
+            if (v == null || v === '') return '—';
+            const n = parseFloat(v);
+            if (isNaN(n)) return '—';
+            return n.toLocaleString('en-US', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        }
+        function nowTimeStr() {
+            return new Date().toTimeString().substring(0, 5);
+        }
+        function todayStr() {
+            // Fecha local en formato YYYY-MM-DD
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+        function addDays(dateStr, n) {
+            // Suma n días a 'YYYY-MM-DD' sin problemas de zona horaria
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dt = new Date(y, m - 1, d + n);
+            return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+        }
+        function timeToMinutes(s) {
+            const p = s.substring(0, 5).split(':');
+            return parseInt(p[0]) * 60 + parseInt(p[1]);
+        }
+        function labelTimePart(lbl) {
+            // Soporta tres formatos de label del gráfico:
+            //   "HH:MM"        → hhmmss/hhmm mode ≤1h
+            //   "HH:MM:SS"     → hhmmss mode
+            //   "MM-DD HH:MM"  → day/partida mode  (lbl[2] === '-')
+            if (lbl && lbl.length >= 11 && lbl[2] === '-') return lbl.substring(6, 11); // "HH:MM"
+            return lbl ? lbl.substring(0, 5) : '';
+        }
+
+        function isTimeInRange(labels, timeStr) {
+            // Devuelve true si timeStr ('HH:MM') cae dentro del rango visible del gráfico.
+            if (!labels || labels.length < 2) return false;
+            const target = timeToMinutes(timeStr.substring(0, 5));
+            const first  = timeToMinutes(labelTimePart(labels[0]));
+            const last   = timeToMinutes(labelTimePart(labels[labels.length - 1]));
+            if (last >= first) {
+                return target >= first && target <= last;
+            } else {
+                // Rango que cruza la medianoche
+                return target >= first || target <= last;
+            }
+        }
+
+        function applyAnnotationVisibility() {
+            if (!chart) return;
+            const filtered = {};
+            Object.keys(lastAnnotations).forEach(key => {
+                if (key.startsWith('evt_') && !showEventos)  return;
+                if (key.startsWith('mst_') && !showMuestras) return;
+                filtered[key] = lastAnnotations[key];
+            });
+            chart.options.plugins.annotation.annotations = filtered;
+            chart.update('none');
+        }
+
+        function getViewPartidaId(data) {
+            // Determina qué partida corresponde a los datos visualmente mostrados.
+            // Modo partida: usa siempre la partida seleccionada.
+            // Modo live/day: busca en allPartidas la que coincide con la fecha
+            //   del timestamp central del dataset cargado.
+            if (appMode === 'partida') return currentPartidaId;
+            if (!data || !data.timestamps || !data.timestamps.length) return null;
+            const mid = data.timestamps[Math.floor(data.timestamps.length / 2)];
+            const viewDate = mid.substring(0, 10);   // 'YYYY-MM-DD'
+            const p = allPartidas.find(x => x.fecha === viewDate);
+            return p ? p.id : null;
+        }
+
+        function findLabelIndex(labels, timeStr) {
+            if (!labels || !labels.length) return 0;
+            const target = timeToMinutes(timeStr.substring(0, 5));
+            let best = 0, bestDiff = Infinity;
+            labels.forEach((lbl, i) => {
+                const d = Math.abs(timeToMinutes(labelTimePart(lbl)) - target);
+                if (d < bestDiff) { bestDiff = d; best = i; }
+            });
+            return best;
+        }
+
+        // ── Chart ──────────────────────────────────────────────────────────
         function initChart() {
             const ctx = document.getElementById('chart').getContext('2d');
             chart = new Chart(ctx, {
@@ -91,8 +418,7 @@
                             label: 'Temperatura (\u00b0C)',
                             data: [],
                             borderColor: '#ff8a65',
-                            backgroundColor: 'rgba(255,138,101,0.08)',
-                            fill: true,
+                            fill: false,
                             yAxisID: 'y-temp',
                             pointRadius: 0,
                             borderWidth: 2,
@@ -103,10 +429,34 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: { padding: { bottom: 8 } },
                     interaction: { mode: 'index', intersect: false },
                     plugins: {
                         legend: {
-                            labels: { color: '#aaa', font: { size: 12 } }
+                            labels: {
+                                color: '#aaa',
+                                font: { size: 14 },
+                                usePointStyle: true,
+                                pointStyleWidth: 22,
+                                generateLabels: function(chart) {
+                                    const items = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                    items.forEach((item, i) => {
+                                        if (i === 0) {
+                                            // Viscosidad → recuadro de área
+                                            item.pointStyle = 'rect';
+                                            item.fillStyle = 'rgba(79,195,247,0.35)';
+                                            item.strokeStyle = '#4fc3f7';
+                                            item.lineWidth = 1;
+                                        } else {
+                                            // Temperatura → línea
+                                            item.pointStyle = 'line';
+                                            item.strokeStyle = '#ff8a65';
+                                            item.lineWidth = 2;
+                                        }
+                                    });
+                                    return items;
+                                }
+                            }
                         },
                         tooltip: {
                             backgroundColor: '#1a2733',
@@ -114,28 +464,49 @@
                             borderWidth: 1,
                             titleColor: '#fff',
                             bodyColor: '#ccc',
-                            callbacks: {
-                                title: function(items) { return items[0].label; }
+                            callbacks: { title: items => items[0].label }
+                        },
+                        annotation: { annotations: {} },
+                        zoom: {
+                            zoom: {
+                                drag: {
+                                    enabled: true,
+                                    backgroundColor: 'rgba(79,195,247,0.08)',
+                                    borderColor: 'rgba(79,195,247,0.5)',
+                                    borderWidth: 1
+                                },
+                                wheel: {
+                                    enabled: true,
+                                    speed: 0.08
+                                },
+                                mode: 'x',
+                                onZoomComplete: ({ chart }) => {
+                                    isZoomed = true;
+                                    document.getElementById('btn-reset-zoom').classList.add('zoomed');
+                                    document.getElementById('refresh-info').textContent = 'Zoom activo \u2014 refresco pausado';
+                                    updateMedicionesForZoom(chart);
+                                }
                             }
                         }
                     },
                     scales: {
                         x: {
-                            ticks: { color: '#666', maxTicksLimit: 12, maxRotation: 0 },
+                            ticks: { color: '#666', maxTicksLimit: 12, maxRotation: 0, font: { size: 13 } },
                             grid: { color: 'rgba(255,255,255,0.05)' }
                         },
                         'y-vl': {
                             type: 'linear',
                             position: 'left',
-                            title: { display: true, text: 'Viscosidad (cP)', color: '#4fc3f7' },
-                            ticks: { color: '#4fc3f7' },
+                            max: 5000,
+                            title: { display: true, text: 'Viscosidad (cP)', color: '#4fc3f7', font: { size: 14 } },
+                            ticks: { color: '#4fc3f7', font: { size: 13 } },
                             grid: { color: 'rgba(255,255,255,0.05)' }
                         },
                         'y-temp': {
                             type: 'linear',
                             position: 'right',
-                            title: { display: true, text: 'Temperatura (\u00b0C)', color: '#ff8a65' },
-                            ticks: { color: '#ff8a65' },
+                            title: { display: true, text: 'Temperatura (\u00b0C)', color: '#ff8a65', font: { size: 14 } },
+                            ticks: { color: '#ff8a65', font: { size: 13 } },
                             grid: { drawOnChartArea: false }
                         }
                     }
@@ -143,93 +514,797 @@
             });
         }
 
-        async function loadData() {
+        // ── Partidas — carga y popup ───────────────────────────────────────
+        async function loadPartidas() {
             try {
-                const res = await fetch(`/api/readings?hours=${currentHours}`);
-                const data = await res.json();
-                lastData = data;
+                const res = await fetch('/api/partidas');
+                allPartidas = await res.json();
+                updateDrawerSelects();
+            } catch(e) {}
+        }
 
-                const labels = data.timestamps.map(ts => {
-                    if (currentHours <= 1) return ts.substring(11, 19);
-                    if (currentHours <= 24) return ts.substring(11, 16);
-                    return ts.substring(5, 16);
+        function updateDrawerSelects() {
+            const evtSel = document.getElementById('f-evento-partida');
+            const mstSel = document.getElementById('f-muestra-partida');
+            const savedEvt = evtSel.value;
+            const savedMst = mstSel.value;
+
+            evtSel.innerHTML = '<option value="">— Sin partida —</option>';
+            mstSel.innerHTML = '<option value="">— Sin partida —</option>';
+
+            allPartidas.forEach(p => {
+                const label = `#${p.numero_partida} — ${p.fecha}${p.articulo ? ' — ' + p.articulo : ''}`;
+                [evtSel, mstSel].forEach(s => {
+                    const o = document.createElement('option');
+                    o.value = p.id;
+                    o.textContent = label;
+                    s.appendChild(o);
+                });
+            });
+
+            if (savedEvt) evtSel.value = savedEvt;
+            if (savedMst) mstSel.value = savedMst;
+
+            // Pre-select current partida in drawer forms
+            if (currentPartidaId) {
+                evtSel.value = String(currentPartidaId);
+                mstSel.value = String(currentPartidaId);
+            }
+        }
+
+        function openPartidaPopup() {
+            const tbody = document.getElementById('partida-table-body');
+            tbody.innerHTML = '';
+
+            // Fila "En Vivo" — fuera de la tabla
+            const liveSection = document.getElementById('partida-live-section');
+            liveSection.innerHTML = '';
+            const liveDiv = document.createElement('div');
+            liveDiv.className = 'popup-live-row' + (appMode === 'live' ? ' selected' : '');
+            liveDiv.innerHTML = '&#9679; DATOS EN TIEMPO REAL';
+            liveDiv.addEventListener('click', () => {
+                closePartidaPopup();
+                setMode('live', null);
+            });
+            liveSection.appendChild(liveDiv);
+
+            // Filas de partidas
+            allPartidas.forEach(p => {
+                const tr = document.createElement('tr');
+                tr.className = 'partida-row' + (currentPartidaId === p.id && appMode === 'partida' ? ' selected' : '');
+                tr.innerHTML = `
+                    <td>${p.fecha}</td>
+                    <td>#${p.numero_partida}</td>
+                    <td>${p.articulo || '<span style="color:var(--text-dim)">—</span>'}</td>
+                `;
+                tr.addEventListener('click', () => {
+                    closePartidaPopup();
+                    setMode('partida', p.id);
+                });
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('partida-popup-overlay').classList.add('open');
+        }
+
+        function closePartidaPopup() {
+            document.getElementById('partida-popup-overlay').classList.remove('open');
+        }
+
+        async function loadCurrentPartida() {
+            try {
+                const res = await fetch('/api/partidas/current');
+                const p = await res.json();
+                updatePartidaCard(p, 'live');
+                if (p) {
+                    currentPartidaId = p.id;
+                    loadAnnotations(p.id);
+                    // Pre-select in drawer forms
+                    document.getElementById('f-evento-partida').value = String(p.id);
+                    document.getElementById('f-muestra-partida').value = String(p.id);
+                }
+            } catch(e) {}
+        }
+
+        function updatePartidaCard(p, mode) {
+            const pill = document.getElementById('partida-mode-pill');
+            if (mode === 'live') {
+                pill.textContent = '● En Vivo';
+                pill.className = 'partida-mode-pill live';
+                pill.style.display = '';
+            } else {
+                pill.style.display = 'none';
+            }
+            if (!p) {
+                document.getElementById('card-partida-fecha').textContent = '--';
+                document.getElementById('card-partida-num').textContent = '--';
+                document.getElementById('card-partida-articulo').textContent = '';
+                return;
+            }
+            document.getElementById('card-partida-fecha').textContent = p.fecha;
+            document.getElementById('card-partida-num').textContent = p.numero_partida;
+            document.getElementById('card-partida-articulo').textContent = p.articulo || '';
+        }
+
+        // ── Annotations ────────────────────────────────────────────────────
+        async function loadAnnotations(partidaId) {
+            if (!partidaId || !chart) return;
+            try {
+                const [evtRes, mstRes] = await Promise.all([
+                    fetch(`/api/partidas/${partidaId}/eventos`),
+                    fetch(`/api/partidas/${partidaId}/muestras`)
+                ]);
+                const eventos  = await evtRes.json();
+                const muestras = await mstRes.json();
+                const labels   = chart.data.labels;
+                const anns     = {};
+
+                // ── Eventos: línea vertical, etiqueta en la parte superior ─────────
+                // Constantes para font-size 14px bold
+                const CHAR_W  = 8.0;   // ancho promedio por carácter a 14px bold
+                const PAD_X   = 16;    // padding horizontal total + bordes
+                const PAD_Y   = 10;    // padding vertical total
+                const LINE_H  = 18;    // altura de línea a 14px
+                const LBL_GAP = 6;     // separación vertical entre niveles
+
+                // Ordenar por posición x para asignar niveles de izquierda a derecha
+                const sortedEvts = [...eventos]
+                    .filter(e => isTimeInRange(labels, e.hora_evento))
+                    .sort((a, b) =>
+                        findLabelIndex(labels, a.hora_evento) - findLabelIndex(labels, b.hora_evento)
+                    );
+
+                const levelRight = [];  // x pixel más a la derecha ocupado por nivel
+
+                sortedEvts.forEach(e => {
+                    const idx  = findLabelIndex(labels, e.hora_evento);
+                    const desc = e.evento.length > 35 ? e.evento.substring(0, 32) + '\u2026' : e.evento;
+                    const contentLines = e.temperatura_c != null
+                        ? [desc, `${e.temperatura_c}\u00b0C`]
+                        : [desc];
+
+                    // Dimensiones estimadas del label
+                    const maxChars = Math.max(...contentLines.map(l => l.length));
+                    const labelW   = Math.round(maxChars * CHAR_W + PAD_X);
+                    const labelH   = contentLines.length * LINE_H + PAD_Y;
+
+                    // Píxel x de la línea
+                    const xPx = chart.scales.x ? chart.scales.x.getPixelForValue(idx) : 0;
+
+                    // xAdjust: borde izquierdo del label alineado con la línea vertical
+                    const xAdjust = Math.round(labelW / 2 + 2);
+
+                    // yAdjust: position:'start' ancla el borde SUPERIOR del label en
+                    // chartArea.top → yAdjust=0 ya es el tope del gráfico, totalmente visible.
+                    // Niveles sucesivos se desplazan hacia abajo por labelH + gap.
+                    let level = 0;
+                    while (levelRight[level] !== undefined && xPx < levelRight[level] + 6) {
+                        level++;
+                    }
+                    levelRight[level] = xPx + labelW;
+                    const yAdjust = level * (labelH + LBL_GAP);
+
+                    anns[`evt_${e.id}`] = {
+                        type: 'line',
+                        xMin: idx,
+                        xMax: idx,
+                        borderColor: '#ffd54f',
+                        borderWidth: 2,
+                        borderDash: [6, 4],
+                        label: {
+                            display: true,
+                            content: contentLines,
+                            position: 'end',
+                            rotation: 0,
+                            xAdjust: xAdjust,
+                            yAdjust: yAdjust,
+                            backgroundColor: 'rgba(40,30,0,0.85)',
+                            color: '#ffd54f',
+                            borderColor: '#ffd54f',
+                            borderWidth: 1,
+                            borderRadius: 3,
+                            font: { size: 14, weight: '600' },
+                            padding: { x: 6, y: 4 }
+                        }
+                    };
                 });
 
-                chart.data.labels = labels;
-                chart.data.datasets[0].data = data.vl;
-                chart.data.datasets[1].data = data.temperature;
+                // ── Muestras: burbujas ancladas al fondo del chart ────────────────
+                const ylvMin      = chart.scales['y-vl'] ? chart.scales['y-vl'].min : 0;
+                const MST_LINE_H  = 18;
+                const MST_LINES   = 2;
+                const MST_PAD_Y   = 10;
+                const MST_HALF_H  = Math.round((MST_LINES * MST_LINE_H + MST_PAD_Y) / 2);
+                const MST_CALLOUT = 14;
+                const mstYAdj     = -(MST_HALF_H + MST_CALLOUT);
+
+                muestras
+                    .filter(m => isTimeInRange(labels, m.hora_medicion))
+                    .forEach(m => {
+                        const idx      = findLabelIndex(labels, m.hora_medicion);
+                        const instrLbl = m.instrumento ? ' ' + m.instrumento.toUpperCase() : '';
+                        const viscStr  = m.medicion_viscosidad.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                        const tempStr  = m.medicion_temperatura.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                        const content  = [
+                            `VISCO.${instrLbl} ${viscStr}`,
+                            `TEMP. ${tempStr} \u00b0C`
+                        ];
+
+                        anns[`mst_${m.id}`] = {
+                            type: 'label',
+                            xValue: idx,
+                            yScaleID: 'y-vl',
+                            yValue: ylvMin,
+                            yAdjust: mstYAdj,
+                            content: content,
+                            backgroundColor: 'rgba(15,35,18,0.92)',
+                            color: '#a5d6a7',
+                            borderColor: '#66bb6a',
+                            borderWidth: 1,
+                            borderRadius: 4,
+                            font: { size: 14, weight: '500' },
+                            textAlign: 'left',
+                            padding: { x: 5, y: 3 },
+                            callout: {
+                                display: true,
+                                position: 'bottom',
+                                side: 8,
+                                borderColor: '#66bb6a',
+                                borderWidth: 1
+                            }
+                        };
+                    });
+
+                console.log(`[annotations] partida ${partidaId}: ${eventos.length} eventos, ${muestras.length} muestras, ${labels.length} labels`);
+                lastAnnotations = anns;
+                applyAnnotationVisibility();
+            } catch(e) {
+                console.error('[annotations] error:', e);
+            }
+        }
+
+        function clearAnnotations() {
+            lastAnnotations = {};
+            if (chart) {
+                chart.options.plugins.annotation.annotations = {};
                 chart.update('none');
+            }
+        }
 
-                document.getElementById('info-count').textContent = `${data.count} lecturas`;
+        // ── Modo producción (partida histórica) ────────────────────────────
+        function setMode(mode, partidaId) {
+            appMode = mode;
+            const timeCtrl = document.getElementById('time-controls');
 
-                const latestRes = await fetch('/api/latest');
-                if (latestRes.ok) {
-                    const latest = await latestRes.json();
-                    document.getElementById('val-vl').textContent =
-                        latest.vl != null ? latest.vl.toFixed(1) : '--';
-                    document.getElementById('val-temp').textContent =
-                        latest.temperature != null ? latest.temperature.toFixed(1) : '--';
-                    document.getElementById('val-ts').textContent =
-                        latest.timestamp || '--';
-                    document.getElementById('status').textContent = 'En linea';
-                    document.getElementById('status').className = 'status online';
-                }
+            if (mode === 'partida' && partidaId) {
+                currentPartidaId = partidaId;
+                // Ocultar controles de tiempo/nav pero mantener visible el botón de zoom
+                Array.from(timeCtrl.children).forEach(el => {
+                    if (el.id !== 'btn-reset-zoom') el.style.display = 'none';
+                });
+                clearInterval(refreshTimer);
+                const p = allPartidas.find(x => x.id === partidaId);
+                updatePartidaCard(p || null, 'partida');
+                document.getElementById('f-evento-partida').value = String(partidaId);
+                document.getElementById('f-muestra-partida').value = String(partidaId);
+                clearMeasurements();
+                loadDataPartida(partidaId);
+            } else {
+                appMode = 'live';
+                currentPartidaId = null;
+                // Restaurar todos los controles de tiempo/nav
+                Array.from(timeCtrl.children).forEach(el => { el.style.display = ''; });
+                loadCurrentPartida();
+                loadData();
+                refreshTimer = setInterval(() => { if (!isZoomed) loadData(); }, REFRESH_INTERVAL);
+            }
+        }
 
-                const statsRes = await fetch(`/api/stats?hours=${currentHours}`);
-                const stats = await statsRes.json();
-                const sb = document.getElementById('stats-bar');
-                if (stats.vl.avg != null) {
-                    sb.innerHTML = `
-                        <span>VL: <strong>avg ${stats.vl.avg}</strong> | min ${stats.vl.min} | max ${stats.vl.max} cP</span>
-                        <span>Temp: <strong>avg ${stats.temperature.avg}</strong> | min ${stats.temperature.min} | max ${stats.temperature.max} \u00b0C</span>
-                        <span>Total: <strong>${stats.total}</strong> lecturas</span>
-                    `;
-                }
-            } catch (err) {
-                document.getElementById('status').textContent = 'Sin conexion';
+        // ── Navegación (compartida teclado / botones / rueda) ──────────────
+        function navigateBack() {
+            if (appMode === 'partida') return;
+            if (isZoomed) resetZoom();
+            if (currentDayMode) {
+                currentViewDate = addDays(currentViewDate, -1);
+            } else {
+                currentOffset += currentHours;
+            }
+            updateNavButtons();
+            loadData();
+        }
+
+        function navigateFwd() {
+            if (appMode === 'partida') return;
+            if (isZoomed) resetZoom();
+            if (currentDayMode) {
+                if (currentViewDate >= todayStr()) return;
+                currentViewDate = addDays(currentViewDate, 1);
+            } else {
+                currentOffset = Math.max(0, currentOffset - currentHours);
+            }
+            updateNavButtons();
+            loadData();
+        }
+
+        // ── Carga de datos (producción) ────────────────────────────────────
+        async function loadDataPartida(partidaId) {
+            try {
+                const dataRes = await fetch(`/api/readings?partida_id=${partidaId}`);
+                const data = await dataRes.json();
+                lastData = data;
+                renderChart(data, 'day');
+                populateRecentReadings(data);
+                renderReadingsLog();
+                loadAnnotations(partidaId);
+            } catch(e) {
+                renderReadingsLog();
+                document.getElementById('status').textContent = '✕ Error';
                 document.getElementById('status').className = 'status offline';
             }
         }
 
-        // Descarga CSV del rango visible
+        // ── Carga de datos (live / day / histórico) ────────────────────────
+        async function loadData() {
+            try {
+                let readingsUrl;
+                if (currentDayMode) {
+                    readingsUrl = `/api/readings?date=${currentViewDate}`;
+                } else {
+                    readingsUrl = `/api/readings?hours=${currentHours}&offset=${currentOffset}`;
+                }
+
+                const res = await fetch(readingsUrl);
+                const data = await res.json();
+                lastData = data;
+
+                const labelMode = (currentDayMode || currentHours > 1) ? 'hhmm' : 'hhmmss';
+                renderChart(data, labelMode);
+
+                // Stats acumuladas + log del card — client-side desde los datos cargados
+                populateRecentReadings(data);
+                renderReadingsLog();
+
+                // Actualizar card Partida según la fecha que se está visualizando
+                if (appMode === 'live') {
+                    const viewPid  = getViewPartidaId(data);
+                    const viewP    = viewPid ? allPartidas.find(x => x.id === viewPid) : null;
+                    const midTs    = data.timestamps && data.timestamps.length
+                                     ? data.timestamps[Math.floor(data.timestamps.length / 2)].substring(0, 10)
+                                     : todayStr();
+                    updatePartidaCard(viewP, midTs === todayStr() ? 'live' : 'historical');
+                }
+
+                if (!currentDayMode && currentOffset === 0) {
+                    // En live: puede aparecer una lectura más nueva que el dataset
+                    const latestRes = await fetch('/api/latest');
+                    if (latestRes.ok) {
+                        const latest = await latestRes.json();
+                        setMeasurements(latest.vl, latest.temperature, latest.temperature, latest.timestamp);
+                        document.getElementById('status').textContent = '● Conectado';
+                        document.getElementById('status').className = 'status online';
+                    }
+                }
+
+                const annPid = getViewPartidaId(data);
+                if (annPid) loadAnnotations(annPid);
+                else clearAnnotations();
+
+            } catch(err) {
+                document.getElementById('status').textContent = '● Sin conexion';
+                document.getElementById('status').className = 'status offline';
+            }
+        }
+
+        function populateRecentReadings(data) {
+            const n = data.timestamps ? data.timestamps.length : 0;
+            recentReadings = [];
+            if (n === 0) return;
+            const rolling = computeRollingStats(data);
+            for (let i = n - 1; i >= Math.max(0, n - MAX_LOG); i--) {
+                recentReadings.push({
+                    hora:  data.timestamps[i].substring(11, 19),
+                    vl:    data.vl          ? data.vl[i]          : null,
+                    temp:  data.temperature ? data.temperature[i] : null,
+                    stats: rolling[i]        // stats acumuladas hasta este punto
+                });
+            }
+        }
+
+        function renderReadingsLog() {
+            const tbody = document.getElementById('medicion-log-body');
+            if (!tbody) return;
+            let html = '';
+            for (let i = 0; i < MAX_LOG; i++) {
+                const r       = recentReadings[i] || null;
+                const hora    = r ? r.hora : '—';
+                const vlStr   = r && r.vl   != null ? fmtNum(r.vl,   0) : '—';
+                const tempStr = r && r.temp != null ? fmtNum(r.temp, 0) : '—';
+                // Stats acumuladas hasta el momento de esta lectura
+                const s = r ? r.stats : null;
+                const vlMin = s && s.vl   ? fmtNum(s.vl.min,   0) : '—';
+                const vlMax = s && s.vl   ? fmtNum(s.vl.max,   0) : '—';
+                const vlAvg = s && s.vl   ? fmtNum(s.vl.avg,   0) : '—';
+                const tMin  = s && s.temp ? fmtNum(s.temp.min, 0) : '—';
+                const tMax  = s && s.temp ? fmtNum(s.temp.max, 0) : '—';
+                const tAvg  = s && s.temp ? fmtNum(s.temp.avg, 0) : '—';
+                const cls   = i === 0 ? 'mlog-latest' : (!r ? 'mlog-placeholder' : '');
+                html += `<tr class="mlog-row${cls ? ' ' + cls : ''}">
+                    <td class="mlog-hora">${hora}</td>
+                    <td class="mlog-real mlog-vl">${vlStr}</td>
+                    <td class="mlog-stat">${vlMin}</td>
+                    <td class="mlog-stat">${vlMax}</td>
+                    <td class="mlog-stat">${vlAvg}</td>
+                    <td class="mlog-real mlog-temp">${tempStr}</td>
+                    <td class="mlog-stat">${tMin}</td>
+                    <td class="mlog-stat">${tMax}</td>
+                    <td class="mlog-stat">${tAvg}</td>
+                </tr>`;
+            }
+            tbody.innerHTML = html;
+            // Total de lecturas al pie del card
+            const tot = document.getElementById('stat-total');
+            const n = lastData && lastData.timestamps ? lastData.timestamps.length : 0;
+            if (tot) tot.textContent = n ? n.toLocaleString('en-US') + ' lecturas' : '';
+        }
+
+        function setMeasurements(vl, temp, _ignored, timestamp) {
+            const hora = timestamp ? timestamp.substring(11, 19) : '—';
+            if (recentReadings.length > 0 && recentReadings[0].hora === hora) return;
+            // Extender stats acumuladas desde la entrada anterior
+            const prevStats = recentReadings.length > 0 ? recentReadings[0].stats : null;
+            const newStats  = extendStats(prevStats, vl, temp);
+            recentReadings.unshift({ hora, vl, temp, stats: newStats });
+            if (recentReadings.length > MAX_LOG) recentReadings.pop();
+            renderReadingsLog();
+        }
+
+        function clearMeasurements() {
+            // En modo histórico/partida: conserva las lecturas del dataset pero limpia
+            // el primer slot para que apunte a los datos del período, no live.
+            // Si el caller ya llamó populateRecentReadings antes, solo re-renderizamos.
+            renderReadingsLog();
+        }
+
+        function renderChart(data, labelMode) {
+            const labels = data.timestamps.map(ts => {
+                if (labelMode === 'hhmmss') return ts.substring(11, 19);
+                if (labelMode === 'hhmm')   return ts.substring(11, 16);
+                return ts.substring(5, 16);
+            });
+            chart.data.labels = labels;
+            chart.data.datasets[0].data = data.vl;
+            chart.data.datasets[1].data = data.temperature;
+            chart.update('none');
+        }
+
+
+        // ── Escala ─────────────────────────────────────────────────────────
+        function applyScales() {
+            const vlAuto = document.getElementById('vl-auto').checked;
+            const tempAuto = document.getElementById('temp-auto').checked;
+            const vlScale = chart.options.scales['y-vl'];
+            const tempScale = chart.options.scales['y-temp'];
+
+            if (vlAuto) {
+                delete vlScale.min; delete vlScale.max;
+            } else {
+                const min = parseFloat(document.getElementById('vl-min').value);
+                const max = parseFloat(document.getElementById('vl-max').value);
+                if (!isNaN(min)) vlScale.min = min; else delete vlScale.min;
+                if (!isNaN(max)) vlScale.max = max; else delete vlScale.max;
+            }
+            if (tempAuto) {
+                delete tempScale.min; delete tempScale.max;
+            } else {
+                const min = parseFloat(document.getElementById('temp-min').value);
+                const max = parseFloat(document.getElementById('temp-max').value);
+                if (!isNaN(min)) tempScale.min = min; else delete tempScale.min;
+                if (!isNaN(max)) tempScale.max = max; else delete tempScale.max;
+            }
+            chart.update();
+            renderReadingsLog();  // re-pinta el card (stats por fila, no cambian con la escala)
+        }
+
+        function updateMedicionesForZoom(chart) {
+            if (!lastData || !lastData.timestamps || !lastData.timestamps.length) return;
+            const xScale = chart.scales.x;
+            const total  = lastData.timestamps.length;
+            const minIdx = Math.max(0,         Math.floor(xScale.min));
+            const maxIdx = Math.min(total - 1, Math.ceil(xScale.max));
+            if (minIdx > maxIdx) return;
+            const sliced = {
+                timestamps:  lastData.timestamps.slice(minIdx, maxIdx + 1),
+                vl:          lastData.vl          ? lastData.vl.slice(minIdx, maxIdx + 1)          : [],
+                temperature: lastData.temperature ? lastData.temperature.slice(minIdx, maxIdx + 1) : []
+            };
+            populateRecentReadings(sliced);
+            renderReadingsLog();
+        }
+
+        function resetZoom() {
+            chart.resetZoom();
+            isZoomed = false;
+            document.getElementById('btn-reset-zoom').classList.remove('zoomed');
+            updateRefreshInfo();
+            // Restaurar MEDICIONES al dataset completo
+            if (lastData) { populateRecentReadings(lastData); renderReadingsLog(); }
+        }
+
+        function updateRefreshInfo() {
+            let txt;
+            if (appMode === 'partida') {
+                txt = 'Vista de partida';
+            } else if (currentDayMode) {
+                const today = todayStr();
+                txt = currentViewDate === today
+                    ? `Hoy — ${currentViewDate}`
+                    : `D\u00eda: ${currentViewDate}`;
+            } else if (currentOffset > 0) {
+                txt = `Vista hist\u00f3rica \u2014 hace ${currentOffset}h`;
+            } else {
+                txt = `Actualiza cada ${REFRESH_INTERVAL / 1000}s`;
+            }
+            document.getElementById('refresh-info').textContent = txt;
+        }
+
+        function updateNavButtons() {
+            const fwd  = document.getElementById('btn-fwd');
+            const auto = document.getElementById('btn-auto');
+
+            if (currentDayMode) {
+                fwd.disabled = currentViewDate >= todayStr();
+                if (auto) auto.classList.toggle('is-live', currentViewDate >= todayStr());
+            } else {
+                fwd.disabled = currentOffset === 0;
+                if (auto) auto.classList.toggle('is-live', currentOffset === 0);
+            }
+            updateRefreshInfo();
+        }
+
+        function setDayMode(active) {
+            currentDayMode = active;
+            document.getElementById('btn-day-mode').classList.toggle('active', active);
+            // Desactivar botones de horas cuando está en modo día
+            document.querySelectorAll('.controls button[data-hours]').forEach(b => {
+                if (active) b.classList.remove('active');
+            });
+        }
+
         function downloadCSV() {
             if (!lastData || lastData.count === 0) return;
-
             let csv = 'Timestamp,VL_cP,Temperature_C\n';
             for (let i = 0; i < lastData.timestamps.length; i++) {
-                const ts = lastData.timestamps[i] || '';
-                const vl = lastData.vl[i] != null ? lastData.vl[i] : '';
-                const temp = lastData.temperature[i] != null ? lastData.temperature[i] : '';
-                csv += `${ts},${vl},${temp}\n`;
+                csv += `${lastData.timestamps[i] || ''},${lastData.vl[i] ?? ''},${lastData.temperature[i] ?? ''}\n`;
             }
-
             const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `hp550_${currentHours}h_${new Date().toISOString().slice(0,10)}.csv`;
+            const suffix = appMode === 'partida' ? `partida${currentPartidaId}` : `${currentHours}h_off${currentOffset}h`;
+            a.download = `hp550_${suffix}_${new Date().toISOString().slice(0,10)}.csv`;
             a.click();
             URL.revokeObjectURL(url);
         }
 
-        // Eventos
+        // ── Drawer ─────────────────────────────────────────────────────────
+        function openDrawer() {
+            document.getElementById('drawer').classList.add('open');
+            document.querySelector('.page').classList.add('drawer-open');
+            document.getElementById('btn-menu').title = 'Cerrar menú';
+        }
+        function closeDrawer() {
+            document.getElementById('drawer').classList.remove('open');
+            document.querySelector('.page').classList.remove('drawer-open');
+            document.getElementById('btn-menu').title = 'Registro de producción';
+        }
+        function toggleDrawer() {
+            document.getElementById('drawer').classList.contains('open') ? closeDrawer() : openDrawer();
+        }
+
+        // ── Event listeners ────────────────────────────────────────────────
+        document.getElementById('btn-menu').addEventListener('click', toggleDrawer);
+        document.getElementById('btn-drawer-close').addEventListener('click', closeDrawer);
+
+        document.getElementById('card-partida').addEventListener('click', openPartidaPopup);
+        document.getElementById('btn-popup-close').addEventListener('click', closePartidaPopup);
+        document.getElementById('partida-popup-overlay').addEventListener('click', e => {
+            if (e.target === e.currentTarget) closePartidaPopup();
+        });
+
+        // Botones de rango horario
         document.querySelectorAll('.controls button[data-hours]').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelector('.controls button.active').classList.remove('active');
+                setDayMode(false);
+                document.querySelector('.controls button.active[data-hours]')?.classList.remove('active');
                 btn.classList.add('active');
                 currentHours = parseFloat(btn.dataset.hours);
+                currentOffset = 0;
+                if (isZoomed) resetZoom();
+                updateNavButtons();
                 loadData();
             });
         });
 
+        // Botón modo día "Partida"
+        document.getElementById('btn-day-mode').addEventListener('click', () => {
+            setDayMode(true);
+            currentViewDate = todayStr();
+            if (isZoomed) resetZoom();
+            updateNavButtons();
+            loadData();
+        });
+
+        document.getElementById('btn-back').addEventListener('click', navigateBack);
+        document.getElementById('btn-fwd').addEventListener('click', navigateFwd);
+
+        document.getElementById('btn-auto').addEventListener('click', () => {
+            setDayMode(true);
+            currentViewDate = todayStr();
+            currentOffset = 0;
+            document.querySelectorAll('.controls button[data-hours]').forEach(b => b.classList.remove('active'));
+            if (isZoomed) resetZoom();
+            updateNavButtons();
+            loadData();
+        });
+
+        // ── Teclado ← → para navegar ──────────────────────────────────────
+        document.addEventListener('keydown', e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+            if (appMode === 'partida') return;
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); navigateBack(); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); navigateFwd(); }
+        });
+
+        document.getElementById('vl-auto').addEventListener('change', function() {
+            document.getElementById('vl-min').disabled = this.checked;
+            document.getElementById('vl-max').disabled = this.checked;
+            if (this.checked) {
+                document.getElementById('vl-max').value = '';
+            }
+            applyScales();
+        });
+        document.getElementById('temp-auto').addEventListener('change', function() {
+            document.getElementById('temp-min').disabled = this.checked;
+            document.getElementById('temp-max').disabled = this.checked;
+            applyScales();
+        });
+        ['vl-min','vl-max','temp-min','temp-max'].forEach(id =>
+            document.getElementById(id).addEventListener('change', applyScales)
+        );
+
+        document.getElementById('btn-reset-zoom').addEventListener('click', resetZoom);
         document.getElementById('btn-download').addEventListener('click', downloadCSV);
 
-        document.getElementById('refresh-info').textContent =
-            `Actualiza cada ${REFRESH_INTERVAL / 1000}s`;
+        document.getElementById('btn-toggle-eventos').addEventListener('click', function() {
+            showEventos = !showEventos;
+            this.classList.toggle('active', showEventos);
+            applyAnnotationVisibility();
+        });
+        document.getElementById('btn-toggle-muestras').addEventListener('click', function() {
+            showMuestras = !showMuestras;
+            this.classList.toggle('active', showMuestras);
+            applyAnnotationVisibility();
+        });
 
+        // ── Formulario: Partida ────────────────────────────────────────────
+        document.getElementById('f-partida-fecha').value = todayStr();
+        document.getElementById('form-partida').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const msg = document.getElementById('msg-partida');
+            const fecha = document.getElementById('f-partida-fecha').value;
+            const num = document.getElementById('f-partida-num').value;
+            const art = document.getElementById('f-partida-articulo').value;
+            if (!fecha || !num) { msg.textContent = 'Fecha y N° son requeridos'; msg.className = 'form-msg err'; return; }
+            try {
+                const res = await fetch('/api/partidas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fecha, numero_partida: parseInt(num), articulo: art || null })
+                });
+                if (res.ok) {
+                    const p = await res.json();
+                    msg.textContent = `Partida #${p.numero_partida} creada`;
+                    msg.className = 'form-msg ok';
+                    document.getElementById('f-partida-num').value = '';
+                    document.getElementById('f-partida-articulo').value = '';
+                    await loadPartidas();
+                    setMode('partida', p.id);
+                } else {
+                    const err = await res.json();
+                    msg.textContent = err.error || 'Error al crear partida';
+                    msg.className = 'form-msg err';
+                }
+            } catch(ex) { msg.textContent = 'Error de conexión'; msg.className = 'form-msg err'; }
+        });
+
+        // ── Formulario: Evento ─────────────────────────────────────────────
+        document.getElementById('f-evento-hora').value = nowTimeStr();
+        document.getElementById('form-evento').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const msg = document.getElementById('msg-evento');
+            const pid = document.getElementById('f-evento-partida').value;
+            const hora = document.getElementById('f-evento-hora').value;
+            const temp = document.getElementById('f-evento-temp').value;
+            const texto = document.getElementById('f-evento-texto').value.trim();
+            if (!pid) { msg.textContent = 'Seleccione una partida'; msg.className = 'form-msg err'; return; }
+            if (!hora || !texto) { msg.textContent = 'Hora y evento son requeridos'; msg.className = 'form-msg err'; return; }
+            try {
+                const res = await fetch(`/api/partidas/${pid}/eventos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hora_evento: hora, temperatura_c: temp ? parseFloat(temp) : null, evento: texto })
+                });
+                if (res.ok) {
+                    msg.textContent = 'Evento registrado';
+                    msg.className = 'form-msg ok';
+                    document.getElementById('f-evento-texto').value = '';
+                    document.getElementById('f-evento-hora').value = nowTimeStr();
+                    if (getViewPartidaId(lastData) === parseInt(pid)) loadAnnotations(parseInt(pid));
+                } else {
+                    const err = await res.json();
+                    msg.textContent = err.error || 'Error';
+                    msg.className = 'form-msg err';
+                }
+            } catch(ex) { msg.textContent = 'Error de conexión'; msg.className = 'form-msg err'; }
+        });
+
+        // ── Formulario: Muestra ────────────────────────────────────────────
+        document.getElementById('f-muestra-hora').value = nowTimeStr();
+        document.getElementById('form-muestra').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const msg = document.getElementById('msg-muestra');
+            const pid = document.getElementById('f-muestra-partida').value;
+            const hora = document.getElementById('f-muestra-hora').value;
+            const tipo = document.getElementById('f-muestra-tipo').value;
+            const inst = document.getElementById('f-muestra-instrumento').value || null;
+            const visc = document.getElementById('f-muestra-visc').value;
+            const temp = document.getElementById('f-muestra-temp').value;
+            if (!pid) { msg.textContent = 'Seleccione una partida'; msg.className = 'form-msg err'; return; }
+            if (!hora || !visc || !temp) { msg.textContent = 'Hora, viscosidad y temperatura son requeridos'; msg.className = 'form-msg err'; return; }
+            try {
+                const res = await fetch(`/api/partidas/${pid}/muestras`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        hora_medicion: hora,
+                        tipo_medicion: tipo,
+                        instrumento: inst,
+                        medicion_viscosidad: parseFloat(visc),
+                        medicion_temperatura: parseFloat(temp)
+                    })
+                });
+                if (res.ok) {
+                    msg.textContent = 'Muestra registrada';
+                    msg.className = 'form-msg ok';
+                    document.getElementById('f-muestra-visc').value = '';
+                    document.getElementById('f-muestra-temp').value = '';
+                    document.getElementById('f-muestra-hora').value = nowTimeStr();
+                    if (getViewPartidaId(lastData) === parseInt(pid)) loadAnnotations(parseInt(pid));
+                } else {
+                    const err = await res.json();
+                    msg.textContent = err.error || 'Error';
+                    msg.className = 'form-msg err';
+                }
+            } catch(ex) { msg.textContent = 'Error de conexión'; msg.className = 'form-msg err'; }
+        });
+
+        // ── Inicialización ─────────────────────────────────────────────────
+        // VL: auto desactivado por defecto, max=5000
+        document.getElementById('vl-auto').checked = false;
+        document.getElementById('vl-min').disabled = false;
+        document.getElementById('vl-max').disabled = false;
+
+        // Arrancar en modo día (hoy) por defecto
+        setDayMode(true);
+        currentViewDate = todayStr();
+
+        updateRefreshInfo();
         initChart();
+        loadPartidas().then(() => loadCurrentPartida());
         loadData();
-        refreshTimer = setInterval(loadData, REFRESH_INTERVAL);
+        refreshTimer = setInterval(() => {
+            if (!isZoomed && appMode === 'live') loadData();
+        }, REFRESH_INTERVAL);
     </script>
 </body>
 </html>

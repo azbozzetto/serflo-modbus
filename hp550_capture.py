@@ -22,7 +22,7 @@ from src.data_storage import DataStorage
 from src.data_logger import HP550DataLogger
 from src.utils import load_config, validate_config
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, abort
 
 
 # ─── Web Dashboard ───────────────────────────────────────────────────────────
@@ -41,24 +41,180 @@ def create_web_app(db_path, table_name):
         conn.row_factory = sqlite3.Row
         return conn
 
+    def get_db_rw():
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
     @app.route('/')
     def dashboard():
         return render_template('dashboard.html')
 
+    @app.route('/api/partidas')
+    def api_partidas_list():
+        conn = get_db()
+        try:
+            rows = conn.execute(
+                'SELECT id, fecha, articulo, numero_partida, created_at FROM partidas ORDER BY fecha DESC, id DESC'
+            ).fetchall()
+            return jsonify([dict(r) for r in rows])
+        finally:
+            conn.close()
+
+    @app.route('/api/partidas/current')
+    def api_partidas_current():
+        conn = get_db()
+        try:
+            today = datetime.now().strftime('%Y-%m-%d')
+            row = conn.execute(
+                'SELECT id, fecha, articulo, numero_partida, created_at FROM partidas WHERE fecha = ? ORDER BY id DESC LIMIT 1',
+                (today,)
+            ).fetchone()
+            if not row:
+                row = conn.execute(
+                    'SELECT id, fecha, articulo, numero_partida, created_at FROM partidas ORDER BY fecha DESC, id DESC LIMIT 1'
+                ).fetchone()
+            if row:
+                return jsonify(dict(row))
+            return jsonify(None)
+        finally:
+            conn.close()
+
+    @app.route('/api/partidas', methods=['POST'])
+    def api_partidas_create():
+        body = request.get_json(force=True) or {}
+        fecha = body.get('fecha', '').strip()
+        articulo = body.get('articulo', '').strip() or None
+        numero_partida = body.get('numero_partida')
+        if not fecha or numero_partida is None:
+            return jsonify({'error': 'fecha y numero_partida son requeridos'}), 400
+        conn = get_db_rw()
+        try:
+            cur = conn.execute(
+                'INSERT INTO partidas (fecha, articulo, numero_partida) VALUES (?, ?, ?)',
+                (fecha, articulo, int(numero_partida))
+            )
+            conn.commit()
+            row = conn.execute('SELECT id, fecha, articulo, numero_partida, created_at FROM partidas WHERE id = ?', (cur.lastrowid,)).fetchone()
+            return jsonify(dict(row)), 201
+        finally:
+            conn.close()
+
+    @app.route('/api/partidas/<int:partida_id>/eventos')
+    def api_eventos_list(partida_id):
+        conn = get_db()
+        try:
+            rows = conn.execute(
+                'SELECT id, partida_id, hora_evento, temperatura_c, evento, created_at FROM eventos WHERE partida_id = ? ORDER BY hora_evento ASC',
+                (partida_id,)
+            ).fetchall()
+            return jsonify([dict(r) for r in rows])
+        finally:
+            conn.close()
+
+    @app.route('/api/partidas/<int:partida_id>/eventos', methods=['POST'])
+    def api_eventos_create(partida_id):
+        body = request.get_json(force=True) or {}
+        hora_evento = body.get('hora_evento', '').strip()
+        evento = body.get('evento', '').strip()
+        temperatura_c = body.get('temperatura_c')
+        if not hora_evento or not evento:
+            return jsonify({'error': 'hora_evento y evento son requeridos'}), 400
+        conn = get_db_rw()
+        try:
+            cur = conn.execute(
+                'INSERT INTO eventos (partida_id, hora_evento, temperatura_c, evento) VALUES (?, ?, ?, ?)',
+                (partida_id, hora_evento, temperatura_c, evento)
+            )
+            conn.commit()
+            row = conn.execute('SELECT id, partida_id, hora_evento, temperatura_c, evento, created_at FROM eventos WHERE id = ?', (cur.lastrowid,)).fetchone()
+            return jsonify(dict(row)), 201
+        finally:
+            conn.close()
+
+    @app.route('/api/partidas/<int:partida_id>/muestras')
+    def api_muestras_list(partida_id):
+        conn = get_db()
+        try:
+            rows = conn.execute(
+                'SELECT id, partida_id, hora_medicion, tipo_medicion, instrumento, medicion_viscosidad, medicion_temperatura, created_at FROM muestras WHERE partida_id = ? ORDER BY hora_medicion ASC',
+                (partida_id,)
+            ).fetchall()
+            return jsonify([dict(r) for r in rows])
+        finally:
+            conn.close()
+
+    @app.route('/api/partidas/<int:partida_id>/muestras', methods=['POST'])
+    def api_muestras_create(partida_id):
+        body = request.get_json(force=True) or {}
+        hora_medicion = body.get('hora_medicion', '').strip()
+        tipo_medicion = body.get('tipo_medicion', '').strip()
+        instrumento = body.get('instrumento') or None
+        medicion_viscosidad = body.get('medicion_viscosidad')
+        medicion_temperatura = body.get('medicion_temperatura')
+        if not hora_medicion or tipo_medicion not in ('lectura', 'laboratorio') or medicion_viscosidad is None or medicion_temperatura is None:
+            return jsonify({'error': 'Campos requeridos: hora_medicion, tipo_medicion, medicion_viscosidad, medicion_temperatura'}), 400
+        conn = get_db_rw()
+        try:
+            cur = conn.execute(
+                'INSERT INTO muestras (partida_id, hora_medicion, tipo_medicion, instrumento, medicion_viscosidad, medicion_temperatura) VALUES (?, ?, ?, ?, ?, ?)',
+                (partida_id, hora_medicion, tipo_medicion, instrumento, float(medicion_viscosidad), float(medicion_temperatura))
+            )
+            conn.commit()
+            row = conn.execute('SELECT id, partida_id, hora_medicion, tipo_medicion, instrumento, medicion_viscosidad, medicion_temperatura, created_at FROM muestras WHERE id = ?', (cur.lastrowid,)).fetchone()
+            return jsonify(dict(row)), 201
+        finally:
+            conn.close()
+
     @app.route('/api/readings')
     def api_readings():
         hours = request.args.get('hours', 1, type=float)
-        limit = request.args.get('limit', 2000, type=int)
+        offset = request.args.get('offset', 0, type=float)
+        limit = request.args.get('limit', 5000, type=int)
+        partida_id = request.args.get('partida_id', None, type=int)
+        date_str = request.args.get('date', None)   # 'YYYY-MM-DD' — vista día completo
         conn = get_db()
         try:
-            rows = conn.execute(f'''
-                SELECT timestamp_local, vl_cp, temperature_c, vc_cp
-                FROM {table_name}
-                WHERE timestamp_gmt >= datetime('now', ? || ' hours')
-                  AND is_valid = 1
-                ORDER BY timestamp_gmt ASC
-                LIMIT ?
-            ''', (str(-hours), limit)).fetchall()
+            if date_str:
+                rows = conn.execute(f'''
+                    SELECT timestamp_local, vl_cp, temperature_c, vc_cp
+                    FROM {table_name}
+                    WHERE date(timestamp_local) = ?
+                      AND is_valid = 1
+                    ORDER BY timestamp_local ASC
+                    LIMIT ?
+                ''', (date_str, limit)).fetchall()
+            elif partida_id:
+                partida = conn.execute('SELECT fecha FROM partidas WHERE id = ?', (partida_id,)).fetchone()
+                if not partida:
+                    return jsonify({'error': 'Partida no encontrada'}), 404
+                rows = conn.execute(f'''
+                    SELECT timestamp_local, vl_cp, temperature_c, vc_cp
+                    FROM {table_name}
+                    WHERE date(timestamp_local) = ?
+                      AND is_valid = 1
+                    ORDER BY timestamp_local ASC
+                    LIMIT ?
+                ''', (partida['fecha'], limit)).fetchall()
+            elif offset > 0:
+                rows = conn.execute(f'''
+                    SELECT timestamp_local, vl_cp, temperature_c, vc_cp
+                    FROM {table_name}
+                    WHERE timestamp_gmt >= datetime('now', ? || ' hours')
+                      AND timestamp_gmt <= datetime('now', ? || ' hours')
+                      AND is_valid = 1
+                    ORDER BY timestamp_gmt ASC
+                    LIMIT ?
+                ''', (str(-(hours + offset)), str(-offset), limit)).fetchall()
+            else:
+                rows = conn.execute(f'''
+                    SELECT timestamp_local, vl_cp, temperature_c, vc_cp
+                    FROM {table_name}
+                    WHERE timestamp_gmt >= datetime('now', ? || ' hours')
+                      AND is_valid = 1
+                    ORDER BY timestamp_gmt ASC
+                    LIMIT ?
+                ''', (str(-hours), limit)).fetchall()
             data = {
                 'timestamps': [],
                 'vl': [],
@@ -100,23 +256,72 @@ def create_web_app(db_path, table_name):
     @app.route('/api/stats')
     def api_stats():
         hours = request.args.get('hours', 24, type=float)
+        offset = request.args.get('offset', 0, type=float)
+        partida_id = request.args.get('partida_id', None, type=int)
+        date_str = request.args.get('date', None)   # 'YYYY-MM-DD'
         conn = get_db()
         try:
-            row = conn.execute(f'''
-                SELECT
-                    COUNT(*) as total,
-                    MIN(timestamp_local) as first_ts,
-                    MAX(timestamp_local) as last_ts,
-                    AVG(vl_cp) as avg_vl,
-                    MIN(vl_cp) as min_vl,
-                    MAX(vl_cp) as max_vl,
-                    AVG(temperature_c) as avg_temp,
-                    MIN(temperature_c) as min_temp,
-                    MAX(temperature_c) as max_temp
-                FROM {table_name}
-                WHERE timestamp_gmt >= datetime('now', ? || ' hours')
-                  AND is_valid = 1
-            ''', (str(-hours),)).fetchone()
+            if date_str:
+                row = conn.execute(f'''
+                    SELECT COUNT(*) as total,
+                        MIN(timestamp_local) as first_ts, MAX(timestamp_local) as last_ts,
+                        AVG(vl_cp) as avg_vl, MIN(vl_cp) as min_vl, MAX(vl_cp) as max_vl,
+                        AVG(temperature_c) as avg_temp, MIN(temperature_c) as min_temp, MAX(temperature_c) as max_temp
+                    FROM {table_name}
+                    WHERE date(timestamp_local) = ? AND is_valid = 1
+                ''', (date_str,)).fetchone()
+            elif partida_id:
+                partida = conn.execute('SELECT fecha FROM partidas WHERE id = ?', (partida_id,)).fetchone()
+                if not partida:
+                    return jsonify({'error': 'Partida no encontrada'}), 404
+                row = conn.execute(f'''
+                    SELECT
+                        COUNT(*) as total,
+                        MIN(timestamp_local) as first_ts,
+                        MAX(timestamp_local) as last_ts,
+                        AVG(vl_cp) as avg_vl,
+                        MIN(vl_cp) as min_vl,
+                        MAX(vl_cp) as max_vl,
+                        AVG(temperature_c) as avg_temp,
+                        MIN(temperature_c) as min_temp,
+                        MAX(temperature_c) as max_temp
+                    FROM {table_name}
+                    WHERE date(timestamp_local) = ?
+                      AND is_valid = 1
+                ''', (partida['fecha'],)).fetchone()
+            elif offset > 0:
+                row = conn.execute(f'''
+                    SELECT
+                        COUNT(*) as total,
+                        MIN(timestamp_local) as first_ts,
+                        MAX(timestamp_local) as last_ts,
+                        AVG(vl_cp) as avg_vl,
+                        MIN(vl_cp) as min_vl,
+                        MAX(vl_cp) as max_vl,
+                        AVG(temperature_c) as avg_temp,
+                        MIN(temperature_c) as min_temp,
+                        MAX(temperature_c) as max_temp
+                    FROM {table_name}
+                    WHERE timestamp_gmt >= datetime('now', ? || ' hours')
+                      AND timestamp_gmt <= datetime('now', ? || ' hours')
+                      AND is_valid = 1
+                ''', (str(-(hours + offset)), str(-offset))).fetchone()
+            else:
+                row = conn.execute(f'''
+                    SELECT
+                        COUNT(*) as total,
+                        MIN(timestamp_local) as first_ts,
+                        MAX(timestamp_local) as last_ts,
+                        AVG(vl_cp) as avg_vl,
+                        MIN(vl_cp) as min_vl,
+                        MAX(vl_cp) as max_vl,
+                        AVG(temperature_c) as avg_temp,
+                        MIN(temperature_c) as min_temp,
+                        MAX(temperature_c) as max_temp
+                    FROM {table_name}
+                    WHERE timestamp_gmt >= datetime('now', ? || ' hours')
+                      AND is_valid = 1
+                ''', (str(-hours),)).fetchone()
             return jsonify({
                 'total': row['total'],
                 'period': {'from': row['first_ts'], 'to': row['last_ts']},

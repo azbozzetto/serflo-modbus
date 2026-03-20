@@ -72,6 +72,41 @@ class DataStorage:
             ON {table_name}(timestamp_gmt)
         ''')
 
+        # Tablas de partidas, eventos y muestras
+        self.sqlite_conn.execute('''
+            CREATE TABLE IF NOT EXISTS partidas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha TEXT NOT NULL,
+                articulo TEXT,
+                numero_partida INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        self.sqlite_conn.execute('''
+            CREATE TABLE IF NOT EXISTS eventos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partida_id INTEGER NOT NULL REFERENCES partidas(id),
+                hora_evento TEXT NOT NULL,
+                temperatura_c REAL,
+                evento TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        self.sqlite_conn.execute('''
+            CREATE TABLE IF NOT EXISTS muestras (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                partida_id INTEGER NOT NULL REFERENCES partidas(id),
+                hora_medicion TEXT NOT NULL,
+                tipo_medicion TEXT NOT NULL CHECK(tipo_medicion IN ('lectura','laboratorio')),
+                instrumento TEXT,
+                medicion_viscosidad REAL NOT NULL,
+                medicion_temperatura REAL NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         self.sqlite_conn.commit()
 
     def _init_csv(self):
