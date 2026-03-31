@@ -269,7 +269,7 @@ Para ejecutar como servicio 24/7 con inicio automático en boot:
 sudo cp hp550-capture.service /etc/systemd/system/
 
 # 2. Agregar usuario al grupo serial
-sudo usermod -a -G dialout azbozzetto
+sudo usermod -a -G dialout pi
 
 # 3. Activar e iniciar
 sudo systemctl daemon-reload
@@ -285,7 +285,7 @@ El servicio está vinculado a `/dev/ttyUSB0`: se detiene automáticamente si se 
 sudo systemctl status hp550-capture    # estado actual
 sudo systemctl stop hp550-capture      # detener
 sudo systemctl restart hp550-capture   # reiniciar
-local         # logs en tiempo real
+journalctl -u hp550-capture -f         # logs en tiempo real
 ```
 
 ---
