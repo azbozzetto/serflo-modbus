@@ -894,14 +894,15 @@
                     updatePartidaCard(viewP, midTs === todayStr() ? 'live' : 'historical');
                 }
 
-                if (!currentDayMode && currentOffset === 0) {
-                    // En live: puede aparecer una lectura más nueva que el dataset
-                    const latestRes = await fetch('/api/latest');
-                    if (latestRes.ok) {
-                        const latest = await latestRes.json();
+                // Verificar conexión siempre, independiente del modo de vista
+                const latestRes = await fetch('/api/latest');
+                if (latestRes.ok) {
+                    const latest = await latestRes.json();
+                    document.getElementById('status').textContent = '● Conectado';
+                    document.getElementById('status').className = 'status online';
+                    if (!currentDayMode && currentOffset === 0) {
+                        // Solo actualizar mediciones en vista live actual
                         setMeasurements(latest.vl, latest.temperature, latest.temperature, latest.timestamp);
-                        document.getElementById('status').textContent = '● Conectado';
-                        document.getElementById('status').className = 'status online';
                     }
                 }
 
