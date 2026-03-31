@@ -239,7 +239,7 @@
             </details>
 
         <!-- Versión al pie del drawer-body -->
-        <div class="drawer-version">v1.3.0</div>
+        <div class="drawer-version">v1.2.0</div>
 
         </div><!-- /drawer-body -->
 
@@ -276,10 +276,9 @@
         let lastAnnotations = {};        // todas las anotaciones sin filtro
         let showEventos  = true;
         let showMuestras = true;
-        let dragAnn          = null;   // key de la anotación siendo arrastrada
-        let dragStartY       = 0;
-        let dragStartAdj     = 0;
-        let annDragPositions = {};    // { 'evt_3': yAdjust, 'mst_5': yAdjust } — persiste entre refreshes
+        let dragAnn      = null;   // key de la anotación siendo arrastrada
+        let dragStartY   = 0;
+        let dragStartAdj = 0;
 
         // ── Helpers ────────────────────────────────────────────────────────
         function computeRollingStats(data) {
@@ -690,12 +689,9 @@
                         level++;
                     }
                     levelRight[level] = xPx + labelW;
-                    const yAdjustDef  = level * (labelH + LBL_GAP);
-                    const evtKey      = `evt_${e.id}`;
-                    const yAdjust     = annDragPositions[evtKey] !== undefined
-                                        ? annDragPositions[evtKey] : yAdjustDef;
+                    const yAdjust = level * (labelH + LBL_GAP);
 
-                    anns[evtKey] = {
+                    anns[`evt_${e.id}`] = {
                         type: 'line',
                         xMin: idx,
                         xMax: idx,
@@ -710,7 +706,7 @@
                             rotation: 0,
                             xAdjust: xAdjust,
                             yAdjust: yAdjust,
-                            backgroundColor: 'rgba(40,30,0,0.75)',
+                            backgroundColor: 'rgba(40,30,0,0.85)',
                             color: '#ffd54f',
                             borderColor: '#ffd54f',
                             borderWidth: 1,
@@ -743,12 +739,9 @@
                         // inferior quede MST_CALLOUT px por encima del anchor (ylvMin).
                         const maxMstChars = Math.max(...content.map(l => l.length));
                         const mstLabelW   = Math.round(maxMstChars * MST_CHAR_W + MST_PAD_X);
-                        const mstYAdjDef  = -(MST_CALLOUT + Math.round(mstLabelW / 2));
-                        const mstKey      = `mst_${m.id}`;
-                        const mstYAdj     = annDragPositions[mstKey] !== undefined
-                                            ? annDragPositions[mstKey] : mstYAdjDef;
+                        const mstYAdj     = -(MST_CALLOUT + Math.round(mstLabelW / 2));
 
-                        anns[mstKey] = {
+                        anns[`mst_${m.id}`] = {
                             type: 'label',
                             drawTime: 'afterDraw',
                             xValue: idx,
@@ -757,7 +750,7 @@
                             yAdjust: mstYAdj,
                             rotation: -90,
                             content: content,
-                            backgroundColor: 'rgba(15,35,18,0.75)',
+                            backgroundColor: 'rgba(15,35,18,0.92)',
                             color: '#a5d6a7',
                             borderWidth: 0,
                             borderRadius: 4,
@@ -783,8 +776,7 @@
         }
 
         function clearAnnotations() {
-            lastAnnotations    = {};
-            annDragPositions   = {};
+            lastAnnotations = {};
             if (chart) {
                 chart.options.plugins.annotation.annotations = {};
                 chart.update('none');
@@ -1121,97 +1113,6 @@
             document.getElementById('drawer').classList.contains('open') ? closeDrawer() : openDrawer();
         }
 
-        // ── Drag de anotaciones (eje vertical) ────────────────────────────
-        function getAnnBBox(key) {
-            const ann = chart.options.plugins.annotation.annotations[key];
-            if (!ann || !chart.chartArea) return null;
-
-            if (ann.type === 'line' && ann.label && ann.label.display) {
-                const lines  = Array.isArray(ann.label.content) ? ann.label.content : [ann.label.content];
-                const labelW = Math.max(...lines.map(l => l.length)) * 8 + 16;
-                const labelH = lines.length * 18 + 10;
-                const xPx    = chart.scales.x ? chart.scales.x.getPixelForValue(ann.xMin) : 0;
-                const cx     = xPx + (ann.label.xAdjust || 0);
-                // position:'end' ancla el borde SUPERIOR del label en chartArea.top + yAdjust
-                const top    = chart.chartArea.top + (ann.label.yAdjust || 0);
-                return { x: cx - labelW / 2, y: top, w: labelW, h: labelH };
-            }
-
-            if (ann.type === 'label') {
-                const lines  = Array.isArray(ann.content) ? ann.content : [ann.content];
-                const origW  = Math.max(...lines.map(l => l.length)) * 8 + 16; // → screen height tras -90°
-                const origH  = lines.length * 18 + 10;                          // → screen width  tras -90°
-                const xPx    = chart.scales.x ? chart.scales.x.getPixelForValue(ann.xValue) : 0;
-                const yBase  = chart.scales[ann.yScaleID] ? chart.scales[ann.yScaleID].getPixelForValue(ann.yValue) : 0;
-                const cy     = yBase + (ann.yAdjust || 0);
-                return { x: xPx - origH / 2, y: cy - origW / 2, w: origH, h: origW };
-            }
-            return null;
-        }
-
-        function hitTestAnn(mx, my) {
-            const anns = chart.options.plugins.annotation.annotations;
-            for (const key of Object.keys(anns)) {
-                const bb = getAnnBBox(key);
-                if (bb && mx >= bb.x && mx <= bb.x + bb.w && my >= bb.y && my <= bb.y + bb.h)
-                    return key;
-            }
-            return null;
-        }
-
-        function initAnnotationDrag() {
-            const canvas = document.getElementById('chart');
-
-            // capture:true para disparar ANTES que los listeners del plugin de zoom
-            canvas.addEventListener('mousedown', function(e) {
-                if (e.button !== 0 || !chart) return;
-                const rect = canvas.getBoundingClientRect();
-                const key  = hitTestAnn(e.clientX - rect.left, e.clientY - rect.top);
-                if (!key) return;
-                const ann    = chart.options.plugins.annotation.annotations[key];
-                dragAnn      = key;
-                dragStartY   = e.clientY - rect.top;
-                dragStartAdj = ann.type === 'line' ? (ann.label.yAdjust || 0) : (ann.yAdjust || 0);
-                canvas.style.cursor = 'grabbing';
-                e.stopPropagation();
-                e.preventDefault();
-            }, { capture: true });
-
-            canvas.addEventListener('mousemove', function(e) {
-                if (!chart) return;
-                const rect = canvas.getBoundingClientRect();
-                const mx   = e.clientX - rect.left;
-                const my   = e.clientY - rect.top;
-                if (dragAnn) {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    const newAdj = dragStartAdj + (my - dragStartY);
-                    const ann    = chart.options.plugins.annotation.annotations[dragAnn];
-                    if (ann) {
-                        if (ann.type === 'line') ann.label.yAdjust = newAdj;
-                        else ann.yAdjust = newAdj;
-                        // Sincronizar en lastAnnotations para que el toggle no lo revierta
-                        const orig = lastAnnotations[dragAnn];
-                        if (orig) {
-                            if (orig.type === 'line') orig.label.yAdjust = newAdj;
-                            else orig.yAdjust = newAdj;
-                        }
-                        // Persistir posición para sobrevivir a refreshes
-                        annDragPositions[dragAnn] = newAdj;
-                        chart.update('none');
-                    }
-                } else {
-                    canvas.style.cursor = hitTestAnn(mx, my) ? 'grab' : '';
-                }
-            }, { capture: true });
-
-            function stopDrag() {
-                if (dragAnn) { dragAnn = null; canvas.style.cursor = ''; }
-            }
-            window.addEventListener('mouseup', stopDrag);
-            canvas.addEventListener('mouseleave', stopDrag);
-        }
-
         // ── Event listeners ────────────────────────────────────────────────
         document.getElementById('btn-menu').addEventListener('click', toggleDrawer);
         document.getElementById('btn-drawer-close').addEventListener('click', closeDrawer);
@@ -1417,7 +1318,6 @@
 
         updateRefreshInfo();
         initChart();
-        initAnnotationDrag();
         loadPartidas().then(() => loadCurrentPartida());
         loadData();
         refreshTimer = setInterval(() => {

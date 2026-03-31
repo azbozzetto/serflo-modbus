@@ -1,0 +1,11 @@
+# Normalizar fin de línea a LF en el repositorio (proyecto corre en Linux)
+* text=auto eol=lf
+
+# Archivos binarios — sin conversión
+*.db    binary
+*.exe   binary
+*.7z    binary
+*.gz    binary
+*.png   binary
+*.jpg   binary
+*.ico   binary

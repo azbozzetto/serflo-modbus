@@ -7,6 +7,32 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.3.0] - 2026-03-31
+
+### Agregado
+- **Vista expandida del gráfico** (botón `↕`): compacta los cards y agranda el área del gráfico; card Partida en una sola fila (N° · artículo · fecha), card Mediciones muestra solo la lectura más reciente
+- **Drag vertical de anotaciones**: los cuadros de eventos y muestras son arrastrables en el eje vertical; la posición persiste entre refreshes y se resetea al cambiar de partida
+- **`migrate_db.py`**: script de migración para agregar tablas `partidas`, `eventos`, `muestras` a bases de datos de versiones anteriores (idempotente, no toca datos existentes)
+- **`_ensure_schema()`** en `hp550_capture.py`: migración automática al iniciar en modo `--web-only`
+- **`.gitattributes`**: normalización de fin de línea a LF para todo el repositorio
+
+### Cambiado
+- Anotaciones de eventos: borde izquierdo recto (alineado con la línea vertical), borde derecho redondeado
+- Anotaciones de muestras: rotadas 90° (etiqueta vertical), sin borde
+- Transparencia de cuadros de anotación: 75% opacidad (permite ver el gráfico subyacente)
+- `drawTime: 'afterDraw'` en todas las anotaciones (siempre por encima de las líneas del gráfico)
+- Ancho mínimo de pantalla aumentado a **900 px**; scroll horizontal contenido en `.page` (no en el browser)
+- `hp550-capture.service`: usuario actualizado de `pi` a `azbozzetto`
+- README: referencia de usuario actualizada a `azbozzetto`
+- `.gitignore`: agregado patrón `*.tmp.*` para excluir temporales de editores
+
+### Corregido
+- `sqlite3.OperationalError: attempt to write a readonly database` en SELECTs: `get_db()` usaba `mode=ro` URI que impide a SQLite escribir archivos WAL/shm incluso en lecturas
+- Posiciones drag de anotaciones que se perdían en cada refresh automático
+- Sub-headers "Real / Min / Max / Avg" del card Mediciones que desaparecían en modo expandido
+
+---
+
 ## [1.2.0] - 2026-03-19
 
 ### Agregado
@@ -64,6 +90,7 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+[1.3.0]: https://github.com/azbozzetto/hp550-hydramotion/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/azbozzetto/hp550-hydramotion/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/azbozzetto/hp550-hydramotion/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/azbozzetto/hp550-hydramotion/releases/tag/v1.0.0

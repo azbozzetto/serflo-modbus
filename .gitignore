@@ -145,8 +145,9 @@ Thumbs.db
 *.bak
 *.backup
 
-# Temporary files
+# Temporary files (incluye *.tmp.12345.67890 generados por editores)
 *.tmp
+*.tmp.*
 temp/
 
 # Configuration overrides (keep base config.yaml)

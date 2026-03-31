@@ -25,6 +25,59 @@ from src.utils import load_config, validate_config
 from flask import Flask, jsonify, render_template, request, abort
 
 
+# ─── Schema ──────────────────────────────────────────────────────────────────
+
+def _ensure_schema(db_path, table_name):
+    """Crea tablas faltantes sin tocar datos existentes (idempotente)."""
+    conn = sqlite3.connect(db_path)
+    conn.execute(f'''
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_gmt   TEXT NOT NULL,
+            timestamp_local TEXT NOT NULL,
+            vl_cp           REAL,
+            temperature_c   REAL,
+            vc_cp           REAL,
+            is_valid        INTEGER DEFAULT 1,
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute(f'CREATE INDEX IF NOT EXISTS idx_timestamp ON {table_name}(timestamp_gmt)')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS partidas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TEXT NOT NULL,
+            articulo TEXT,
+            numero_partida INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS eventos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            partida_id INTEGER NOT NULL REFERENCES partidas(id),
+            hora_evento TEXT NOT NULL,
+            temperatura_c REAL,
+            evento TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS muestras (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            partida_id INTEGER NOT NULL REFERENCES partidas(id),
+            hora_medicion TEXT NOT NULL,
+            tipo_medicion TEXT NOT NULL CHECK(tipo_medicion IN ('lectura','laboratorio')),
+            instrumento TEXT,
+            medicion_viscosidad REAL NOT NULL,
+            medicion_temperatura REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
 # ─── Web Dashboard ───────────────────────────────────────────────────────────
 
 def create_web_app(db_path, table_name):
@@ -37,7 +90,9 @@ def create_web_app(db_path, table_name):
     log.setLevel(logging.WARNING)
 
     def get_db():
-        conn = sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)
+        # mode=ro causa "attempt to write a readonly database" en WAL mode
+        # (SQLite necesita escribir el archivo -shm incluso para SELECTs)
+        conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
@@ -691,6 +746,9 @@ Press Ctrl+C to stop gracefully.
             db_path = config['data_capture']['sqlite']['database']
             table_name = config['data_capture']['sqlite']['table_name']
             port = args.port or config.get('web', {}).get('port', 5000)
+
+            # Asegurar que el schema esté actualizado (seguro sobre BD existente)
+            _ensure_schema(db_path, table_name)
 
             print(f"Base de datos: {db_path}")
             print(f"Dashboard: http://0.0.0.0:{port}")
